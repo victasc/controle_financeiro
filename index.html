@@ -214,6 +214,21 @@ select.form-input{background-image:none}
     <div class="card-title">Últimas transações</div>
     <div id="recent-list"></div>
   </div>
+  <div class="card">
+    <div class="card-title">Backup & Restauração</div>
+    <p style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:12px">Exporte todos os seus dados para migrar entre dispositivos ou fazer backup.</p>
+    <div class="row2">
+      <button class="btn-secondary" style="display:flex;align-items:center;justify-content:center;gap:7px" onclick="exportJSON()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar JSON
+      </button>
+      <button class="btn-secondary" style="display:flex;align-items:center;justify-content:center;gap:7px" onclick="document.getElementById('import-json-input').click()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Importar JSON
+      </button>
+    </div>
+    <input type="file" id="import-json-input" accept=".json,application/json" style="display:none" onchange="importJSON(this)">
+  </div>
 </div>
 
 <!-- ══════════ LANÇAMENTOS ══════════ -->
@@ -1101,6 +1116,68 @@ function exportExcel(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(saldoDays),'Saldo Diário');
   XLSX.writeFile(wb,`financas_${todayStr()}.xlsx`);
   toast('✅ Excel exportado!');
+}
+
+// ═══════════════════ BACKUP / RESTORE ═══════════════════
+function exportJSON(){
+  const json = JSON.stringify(S, null, 2);
+  const date = new Date().toISOString().split('T')[0];
+  const filename = `financas_backup_${date}.json`;
+
+  // iOS Share Sheet via Web Share API
+  if(navigator.share && /iPhone|iPad|iPod/.test(navigator.userAgent)){
+    const file = new File([json], filename, {type:'application/json'});
+    navigator.share({ files:[file], title:'Backup Finanças' })
+      .then(()=>toast('✅ Backup compartilhado!'))
+      .catch(()=>toast('Compartilhamento cancelado'));
+    return;
+  }
+
+  // Desktop: cria link invisível e clica
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  toast('✅ Backup exportado!');
+}
+
+function importJSON(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      // Validate minimum structure
+      if(typeof parsed !== 'object' || !parsed.lancamentos){
+        toast('⚠️ Arquivo inválido');
+        return;
+      }
+      openConfirm('Substituir todos os dados atuais pelo backup? Esta ação não pode ser desfeita.', () => {
+        S = { ...DEF, ...parsed };
+        save();
+        render();
+        // Refresh SI inputs
+        const si = S.saldoIni;
+        const siVal = document.getElementById('si-valor');
+        const siData = document.getElementById('si-data');
+        const siLim = document.getElementById('si-limite');
+        if(siVal) siVal.value = si.valor || '';
+        if(siData) siData.value = si.data || '';
+        if(siLim) siLim.value = si.limite || 150;
+        toast('✅ Dados restaurados com sucesso!');
+      });
+    } catch(err) {
+      toast('⚠️ Erro ao ler o arquivo JSON');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
 }
 
 // ═══════════════════ RENDER GLOBAL ═══════════════════
