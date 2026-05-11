@@ -109,6 +109,12 @@ select.form-input{background-image:none}
 #toast{position:absolute;bottom:calc(var(--nav-h) + 14px);left:50%;transform:translateX(-50%) translateY(16px);background:var(--bg4);border:.5px solid var(--border2);border-radius:99px;padding:9px 18px;font-size:12px;font-weight:500;white-space:nowrap;opacity:0;transition:all .22s;z-index:300;pointer-events:none}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* ── GROUP COLLAPSIBLE ── */
+.group-header{display:flex;align-items:center;gap:8px;padding:8px 4px;cursor:pointer;margin-bottom:6px;-webkit-tap-highlight-color:transparent}
+.group-header:active{opacity:.7}
+.group-arrow{font-size:14px;color:var(--text3);transition:transform .2s,color .15s;display:inline-block}
+.group-arrow.open{transform:rotate(90deg);color:var(--accent)}
+
 /* ── AI ASSISTANT ── */
 #ai-fab{position:absolute;bottom:calc(var(--nav-h) + 16px);right:16px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#a855f7);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(124,106,255,0.45);z-index:150;transition:transform .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent}
 #ai-fab:active{transform:scale(.92);box-shadow:0 2px 10px rgba(124,106,255,0.3)}
@@ -200,12 +206,10 @@ select.form-input{background-image:none}
     <div class="metric"><div class="metric-label">Fixo pago</div><div class="metric-val" id="m-fix" style="color:var(--orange)">—</div></div>
     <div class="metric" style="cursor:pointer" onclick="editSaldoIni()"><div class="metric-label">Saldo inicial ✎</div><div class="metric-val" id="m-si" style="color:var(--accent)">—</div></div>
   </div>
-  <!-- Tags mês corrente -->
   <div class="card">
     <div class="card-title">Gastos por tag — mês atual</div>
     <div id="tags-mes-atual"></div>
   </div>
-  <!-- Tags mês passado -->
   <div class="card">
     <div class="card-title">Gastos por tag — mês passado</div>
     <div id="tags-mes-ant"></div>
@@ -373,7 +377,6 @@ const DEF = {
   receitasFixas:[
     {id:101,nome:'Salário',valor:5000,dia:5}
   ],
-  // pagamentos[mes_ano][tipo][id] = {status:'pago'|'vencido'|'pendente', valor}
   pagamentos:{},
   tags:['Alimentação','Transporte','Saúde','Lazer','Educação','Vestuário','Casa','Assinatura','Outro'],
   categorias:['Alimentação','Transporte','Saúde','Lazer','Educação','Vestuário','Casa','Outro'],
@@ -434,9 +437,6 @@ function toggleTag(el,tag,i){
   else{selectedTags.splice(idx,1);el.classList.remove('selected');el.style.borderColor='';el.style.background='';el.style.color='';}
 }
 
-// ═══════════════════ POPULARS SELECT CATEGORIAS ═══════════════════
-function buildCatSelect(){} // kept for backwards compat, no-op
-
 // ═══════════════════ ADD LANÇAMENTO ═══════════════════
 function addLanc(){
   const desc=document.getElementById('f-desc').value.trim();
@@ -476,6 +476,87 @@ function deleteLanc(id){
   });
 }
 
+// ═══════════════════ EDITAR LANÇAMENTO ═══════════════════
+let _editTipo='debito';
+let _editTags=[];
+
+function openEditLanc(id){
+  const l=S.lancamentos.find(x=>x.id===id);
+  if(!l)return;
+  _editTipo=l.tipo;
+  _editTags=l.tags?[...l.tags]:[];
+  const tagsOpts=S.tags.map((t,i)=>{
+    const sel=_editTags.includes(t);
+    const sc=sel?`border-color:${tagColor(i)};background:${tagColor(i)}22;color:${tagColor(i)}`:'';
+    return`<div class="tag-pill${sel?' selected':''}" style="${sc}" onclick="toggleEditTag(this,'${t.replace(/'/g,"\\'")}',${i})" data-tag="${t}">${t}</div>`;
+  }).join('');
+  const html=`
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title">Editar lançamento</div>
+        <div class="seg-ctrl" id="edit-seg-tipo" style="margin-bottom:14px">
+          <button class="seg-btn${l.tipo==='entrada'?' active':''}" onclick="setEditSeg('entrada',this)">💰 Entrada</button>
+          <button class="seg-btn${l.tipo==='debito'?' active':''}" onclick="setEditSeg('debito',this)">💳 Débito</button>
+          <button class="seg-btn${l.tipo==='credito'?' active':''}" onclick="setEditSeg('credito',this)">🃏 Crédito</button>
+          <button class="seg-btn${l.tipo==='fixo'?' active':''}" onclick="setEditSeg('fixo',this)">📋 Fixo</button>
+        </div>
+        <div class="form-section">
+          <label class="form-label">Descrição</label>
+          <input class="form-input" id="e-desc" type="text" value="${l.desc.replace(/"/g,'&quot;')}" autocomplete="off">
+        </div>
+        <div class="row2">
+          <div class="form-section">
+            <label class="form-label">Valor (R$)</label>
+            <input class="form-input" id="e-valor" type="number" inputmode="decimal" step="0.01" min="0" value="${l.valor}">
+          </div>
+          <div class="form-section">
+            <label class="form-label">Data</label>
+            <input class="form-input" id="e-data" type="date" value="${l.data}">
+          </div>
+        </div>
+        <div class="form-section">
+          <label class="form-label">Tags</label>
+          <div id="e-tags-picker" style="display:flex;flex-wrap:wrap;gap:4px;min-height:32px">${tagsOpts}</div>
+        </div>
+        <button class="btn-primary" id="e-save-btn">Salvar alterações</button>
+        <button class="btn-secondary" style="margin-top:8px" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  document.getElementById('modal-root').innerHTML=html;
+  document.getElementById('e-save-btn').onclick=()=>saveEditLanc(id);
+}
+
+function setEditSeg(t,btn){
+  _editTipo=t;
+  document.querySelectorAll('#edit-seg-tipo .seg-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function toggleEditTag(el,tag,i){
+  const idx=_editTags.indexOf(tag);
+  if(idx===-1){
+    _editTags.push(tag);
+    el.classList.add('selected');
+    el.style.borderColor=tagColor(i);el.style.background=tagColor(i)+'22';el.style.color=tagColor(i);
+  } else {
+    _editTags.splice(idx,1);
+    el.classList.remove('selected');el.style.borderColor='';el.style.background='';el.style.color='';
+  }
+}
+
+function saveEditLanc(id){
+  const desc=document.getElementById('e-desc').value.trim();
+  const valor=parseFloat(document.getElementById('e-valor').value);
+  const data=document.getElementById('e-data').value||todayStr();
+  if(!desc){toast('⚠️ Informe a descrição');return;}
+  if(!valor||valor<=0){toast('⚠️ Informe o valor');return;}
+  const idx=S.lancamentos.findIndex(x=>x.id===id);
+  if(idx===-1)return;
+  S.lancamentos[idx]={...S.lancamentos[idx],tipo:_editTipo,desc,valor,data,tags:[..._editTags]};
+  save();closeModal();render();toast('✓ Lançamento atualizado');
+}
+
 // ═══════════════════ SALDO INICIAL ═══════════════════
 function saveSI(){
   S.saldoIni.valor=parseFloat(document.getElementById('si-valor').value)||0;
@@ -484,14 +565,30 @@ function saveSI(){
   save();renderSaldo();
 }
 function editSaldoIni(){
-  const v=prompt('Saldo inicial (R$):',S.saldoIni.valor);
-  if(v===null)return;
-  const n=parseFloat(v);if(isNaN(n))return;
-  S.saldoIni.valor=n;save();render();toast('✓ Saldo inicial atualizado');
+  const cur=S.saldoIni.valor;
+  const html=`
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal-sheet">
+        <div class="modal-handle"></div>
+        <div class="modal-title">Saldo inicial</div>
+        <div class="form-section">
+          <label class="form-label">Valor (R$)</label>
+          <input class="form-input" id="m-si-val" type="number" inputmode="decimal" step="0.01" value="${cur}">
+        </div>
+        <button class="btn-primary" id="m-si-save">Salvar</button>
+        <button class="btn-secondary" style="margin-top:8px" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  document.getElementById('modal-root').innerHTML=html;
+  document.getElementById('m-si-save').onclick=()=>{
+    const n=parseFloat(document.getElementById('m-si-val').value);
+    if(isNaN(n))return;
+    S.saldoIni.valor=n;save();closeModal();render();toast('✓ Saldo inicial atualizado');
+  };
+  setTimeout(()=>{const el=document.getElementById('m-si-val');if(el){el.focus();el.select();}},120);
 }
 
 // ═══════════════════ PAGAMENTOS ═══════════════════
-// Key: 'YYYY-MM', tipo: 'cf'|'rf', id: cf.id|rf.id
 function getPagKey(mesAno,tipo,id){return`${mesAno}_${tipo}_${id}`}
 function getPag(mesAno,tipo,id){
   const k=getPagKey(mesAno,tipo,id);
@@ -568,11 +665,12 @@ function openModalCF(editId){
           <div class="form-section"><label class="form-label">Dia do mês</label>
             <input class="form-input" id="m-cf-dia" type="number" inputmode="numeric" min="1" max="31" placeholder="1–31" value="${item?item.dia:''}"></div>
         </div>
-        <button class="btn-primary" onclick="saveCF(${editId!=null?editId:'null'})">${item?'Salvar alterações':'Adicionar conta'}</button>
+        <button class="btn-primary" id="m-cf-save">${item?'Salvar alterações':'Adicionar conta'}</button>
         <button class="btn-secondary" style="margin-top:8px" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
   document.getElementById('modal-root').innerHTML=html;
+  document.getElementById('m-cf-save').onclick=()=>saveCF(editId!=null?editId:null);
 }
 function saveCF(editId){
   editId = (editId===undefined||editId===null||editId==='null') ? null : Number(editId);
@@ -605,11 +703,12 @@ function openModalRF(editId){
           <div class="form-section"><label class="form-label">Dia do mês</label>
             <input class="form-input" id="m-rf-dia" type="number" inputmode="numeric" min="1" max="31" placeholder="1–31" value="${item?item.dia:''}"></div>
         </div>
-        <button class="btn-primary" onclick="saveRF(${editId!=null?editId:'null'})">${item?'Salvar alterações':'Adicionar receita'}</button>
+        <button class="btn-primary" id="m-rf-save">${item?'Salvar alterações':'Adicionar receita'}</button>
         <button class="btn-secondary" style="margin-top:8px" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
   document.getElementById('modal-root').innerHTML=html;
+  document.getElementById('m-rf-save').onclick=()=>saveRF(editId!=null?editId:null);
 }
 function saveRF(editId){
   editId = (editId===undefined||editId===null||editId==='null') ? null : Number(editId);
@@ -627,7 +726,6 @@ function saveRF(editId){
 }
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
 
-// Modal de confirmação — confirm() é bloqueado pelo Safari em innerHTML dinâmico
 function openConfirm(msg, onYes){
   const html=`
     <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
@@ -642,30 +740,27 @@ function openConfirm(msg, onYes){
   document.getElementById('modal-root').innerHTML=html;
   document.getElementById('modal-confirm-yes').onclick=()=>{closeModal();onYes();};
 }
-// Retorna o valor efetivo (editado ou padrão)
+
 function getValorEfetivo(mesAno,tipo,id,defaultVal){
   const p=getPag(mesAno,tipo,id);
   return (p.valor!=null)?p.valor:defaultVal;
 }
-// Retorna o dia efetivo de pagamento/recebimento (editado ou padrão)
 function getDiaEfetivo(mesAno,tipo,id,defaultDia){
   const p=getPag(mesAno,tipo,id);
   return (p.dia!=null)?p.dia:defaultDia;
 }
 
 // ═══════════════════ CÁLCULO SALDO ═══════════════════
-// Retorna objeto {entrada, fixo, debito, credito, total} para um dia
 function calcDia(dataStr){
   const td=todayStr();
   const isPast=dataStr<=td;
   const d=new Date(dataStr+'T12:00:00');
   const dia=d.getDate();
-  const mesAno=dataStr.substring(0,7); // YYYY-MM
+  const mesAno=dataStr.substring(0,7);
 
   let entrada=0, fixo=0, debito=0, credito=0;
   const items={entrada:[],fixo:[],debito:[],credito:[]};
 
-  // Receitas fixas marcadas como PAGAS neste mês, cujo dia efetivo == dia
   S.receitasFixas.forEach(rf=>{
     const diaEfetivo=getDiaEfetivo(mesAno,'rf',rf.id,rf.dia);
     if(diaEfetivo===dia){
@@ -678,13 +773,11 @@ function calcDia(dataStr){
     }
   });
 
-  // Entradas manuais lançadas neste dia
   S.lancamentos.filter(l=>l.tipo==='entrada'&&l.data===dataStr).forEach(l=>{
     entrada+=l.valor;
     items.entrada.push({...l});
   });
 
-  // Contas fixas marcadas como PAGAS neste mês, cujo dia efetivo == dia
   S.contasFixas.forEach(cf=>{
     const diaEfetivo=getDiaEfetivo(mesAno,'cf',cf.id,cf.dia);
     if(diaEfetivo===dia){
@@ -697,28 +790,21 @@ function calcDia(dataStr){
     }
   });
 
-  // Débito: sempre verifica lançamentos reais primeiro
-  // Para dias futuros SEM lançamento manual → aplica limite diário
   const debLanc=S.lancamentos.filter(l=>l.tipo==='debito'&&l.data===dataStr);
   if(debLanc.length>0){
-    // há lançamentos manuais (passado ou futuro explícito)
     debLanc.forEach(l=>{debito+=l.valor;items.debito.push({...l});});
   } else if(!isPast){
-    // dia futuro sem lançamento → projeção pelo limite diário
     debito=S.saldoIni.limite||150;
     items.debito.push({desc:'Limite diário projetado',valor:debito,tipo:'debito'});
   } else {
-    // dia passado sem lançamento → zero (não gastou ou não lançou)
     debito=0;
   }
 
-  // Crédito: lançamentos (já expandidos em parcelas) neste dia
   S.lancamentos.filter(l=>l.tipo==='credito'&&l.data===dataStr).forEach(l=>{
     credito+=l.valor;
     items.credito.push({...l});
   });
 
-  // Fixo manual lançado neste dia
   S.lancamentos.filter(l=>l.tipo==='fixo'&&l.data===dataStr).forEach(l=>{
     fixo+=l.valor;
     items.fixo.push({...l});
@@ -771,7 +857,6 @@ function renderDashboard(){
     if(l.tipo==='debito'||l.tipo==='credito')totalGas+=l.valor;
     if(l.tipo==='fixo')totalFix+=l.valor;
   });
-  // Receitas fixas pagas no mês atual
   S.receitasFixas.forEach(rf=>{
     const p=getPag(prefix,'rf',rf.id);
     if(p.status==='pago')totalEnt+=getValorEfetivo(prefix,'rf',rf.id,rf.valor);
@@ -785,13 +870,11 @@ function renderDashboard(){
   document.getElementById('m-fix').textContent=fmtS(totalFix);
   document.getElementById('m-si').textContent=fmtS(S.saldoIni.valor);
 
-  // Tags por mês
   renderTagsChart('tags-mes-atual',prefix);
   const prev=new Date(now.getFullYear(),now.getMonth()-1,1);
   const pPrefix=`${prev.getFullYear()}-${String(prev.getMonth()+1).padStart(2,'0')}`;
   renderTagsChart('tags-mes-ant',pPrefix);
 
-  // Recentes
   const recent=S.lancamentos.slice(0,8);
   const rl=document.getElementById('recent-list');
   if(!recent.length){rl.innerHTML='<div class="empty-state"><div class="icon">💸</div><p>Nenhuma transação ainda.</p></div>';return;}
@@ -826,17 +909,22 @@ function renderLancamentos(){
   if(!document.getElementById('f-data').value)document.getElementById('f-data').value=todayStr();
   renderTagsPicker();
 
+  const td=todayStr();
   const byDate={};
   S.lancamentos.forEach(l=>{(byDate[l.data]=byDate[l.data]||[]).push(l);});
   const dates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
   const hl=document.getElementById('hist-list');
   if(!dates.length){hl.innerHTML='<div class="empty-state"><div class="icon">📝</div><p>Nenhum lançamento ainda.</p></div>';return;}
-  hl.innerHTML=dates.map(dt=>`
-    <div style="margin-bottom:12px">
+
+  const futureDates=dates.filter(d=>d>td);
+  const pastDates=dates.filter(d=>d<=td);
+
+  function renderDateGroup(dt){
+    return`<div style="margin-bottom:12px">
       <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;padding:0 2px">${ptDate(dt)}</div>
       <div class="card" style="padding:6px 10px">
         ${byDate[dt].map(l=>`
-          <div class="tx-item">
+          <div class="tx-item" onclick="openEditLanc(${l.id})">
             <div class="tx-icon" style="background:${COLORS[l.tipo]}">${ICONS[l.tipo]}</div>
             <div class="tx-info">
               <div class="tx-desc">${l.desc}</div>
@@ -844,11 +932,44 @@ function renderLancamentos(){
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <div class="tx-val" style="color:${VCOL[l.tipo]}">${l.tipo==='entrada'?'+':'−'}${fmtS(l.valor)}</div>
-              <button class="btn-danger" onclick="deleteLanc(${l.id})">✕</button>
+              <button class="btn-danger" onclick="event.stopPropagation();deleteLanc(${l.id})">✕</button>
             </div>
           </div>`).join('')}
       </div>
-    </div>`).join('');
+    </div>`;
+  }
+
+  let html='';
+
+  // Futuras agrupadas e colapsadas
+  if(futureDates.length){
+    const totalFut=futureDates.reduce((s,d)=>s+byDate[d].length,0);
+    html+=`<div>
+      <div class="group-header" onclick="toggleGroup('fut')">
+        <span class="group-arrow" id="fut-arrow">›</span>
+        <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Lançamentos futuros</span>
+        <span style="font-size:10px;background:var(--bg4);color:var(--text3);border-radius:99px;padding:1px 7px;margin-left:auto">${totalFut}</span>
+      </div>
+      <div id="fut-body" style="display:none">
+        ${futureDates.map(renderDateGroup).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Passados e hoje, decrescente (já estão nessa ordem)
+  html+=pastDates.map(renderDateGroup).join('');
+  hl.innerHTML=html;
+}
+
+// Toggle genérico de grupos colapsáveis
+function toggleGroup(key){
+  const body=document.getElementById(key+'-body');
+  const arrow=document.getElementById(key+'-arrow');
+  if(!body||!arrow)return;
+  const open=body.style.display==='block';
+  body.style.display=open?'none':'block';
+  arrow.style.transform=open?'':'rotate(90deg)';
+  arrow.style.color=open?'var(--text3)':'var(--accent)';
 }
 
 // ═══════════════════ RENDER SALDO ═══════════════════
@@ -945,11 +1066,45 @@ function renderPagamentos(){
   renderPagReceitas();
 }
 
+function buildPagLoop(tipo, items_fn){
+  const now=new Date();
+  const curMonth=now.getMonth()+1;
+  let curHtml='', pastHtml='', futHtml='';
+  const sIcon={pago:'✅',vencido:'❌',pendente:'⬜'};
+  const sBg={pago:'var(--green-dim)',vencido:'var(--red-dim)',pendente:'var(--bg4)'};
+  for(let m=1;m<=12;m++){
+    const mk=`2026-${String(m).padStart(2,'0')}`;
+    const isCur=m===curMonth;
+    const isPast=m<curMonth;
+    const isFut=m>curMonth;
+    const items=items_fn(mk,sIcon,sBg);
+    if(!items)continue;
+    const label=`${meses[m-1]} 2026${isCur?' <span style="background:var(--accent-dim);color:var(--accent);font-size:9px;padding:2px 6px;border-radius:99px;font-weight:600;margin-left:4px">atual</span>':''}`;
+    const block=`<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">${label}</div>
+      ${items}
+    </div>`;
+    if(isPast) pastHtml+=block;
+    else if(isCur) curHtml+=block;
+    else futHtml+=block;
+  }
+  let html='';
+  if(pastHtml){
+    html+=`<div>
+      <div class="group-header" onclick="toggleGroup('pag-${tipo}-past')">
+        <span class="group-arrow" id="pag-${tipo}-past-arrow">›</span>
+        <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Meses passados</span>
+      </div>
+      <div id="pag-${tipo}-past-body" style="display:none">${pastHtml}</div>
+    </div>`;
+  }
+  html+=curHtml+futHtml;
+  return html;
+}
+
 function renderPagFixas(){
   const el=document.getElementById('pag-fixas-list');
-  const now=new Date();
 
-  // ── Seção de gerenciamento (cadastro) ──
   const cfList=S.contasFixas.filter(c=>c.nome).map(c=>`
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:.5px solid var(--border)">
       <div style="flex:1;min-width:0">
@@ -960,14 +1115,8 @@ function renderPagFixas(){
       <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteCF(${c.id})">✕</button>
     </div>`).join('');
 
-  // ── Loop mensal ──
-  let html='';
-  for(let m=1;m<=12;m++){
-    const mk=`2026-${String(m).padStart(2,'0')}`;
-    const isCur=m===now.getMonth()+1;
-    const sIcon={pago:'✅',vencido:'❌',pendente:'⬜'};
-    const sBg={pago:'var(--green-dim)',vencido:'var(--red-dim)',pendente:'var(--bg4)'};
-    const items=S.contasFixas.filter(c=>c.nome).map(c=>{
+  const loopHtml=buildPagLoop('cf',(mk,sIcon,sBg)=>{
+    return S.contasFixas.filter(c=>c.nome).map(c=>{
       const p=getPag(mk,'cf',c.id);
       const st=p.status||'pendente';
       const val=getValorEfetivo(mk,'cf',c.id,c.valor);
@@ -985,12 +1134,7 @@ function renderPagFixas(){
         </div>
       </div>`;
     }).join('');
-    if(!items)continue;
-    html+=`<div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">${meses[m-1]} 2026 ${isCur?'<span style="background:var(--accent-dim);color:var(--accent);font-size:9px;padding:2px 6px;border-radius:99px;font-weight:600;margin-left:4px">atual</span>':''}</div>
-      ${items}
-    </div>`;
-  }
+  });
 
   el.innerHTML=`
     <div class="card" style="margin-bottom:14px">
@@ -998,14 +1142,12 @@ function renderPagFixas(){
       ${cfList||'<div style="font-size:11px;color:var(--text3)">Nenhuma conta fixa cadastrada ainda.</div>'}
     </div>
     <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;margin-top:4px">Pagamentos por mês</div>
-    ${html||'<div class="empty-state"><div class="icon">📋</div><p>Adicione contas fixas acima para acompanhar os pagamentos.</p></div>'}`;
+    ${loopHtml||'<div class="empty-state"><div class="icon">📋</div><p>Adicione contas fixas acima para acompanhar os pagamentos.</p></div>'}`;
 }
 
 function renderPagReceitas(){
   const el=document.getElementById('pag-receitas-list');
-  const now=new Date();
 
-  // ── Seção de gerenciamento ──
   const rfList=S.receitasFixas.filter(r=>r.nome).map(r=>`
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:.5px solid var(--border)">
       <div style="flex:1;min-width:0">
@@ -1016,14 +1158,8 @@ function renderPagReceitas(){
       <button class="btn-danger" style="font-size:11px;padding:4px 8px" onclick="deleteRF(${r.id})">✕</button>
     </div>`).join('');
 
-  // ── Loop mensal ──
-  let html='';
-  for(let m=1;m<=12;m++){
-    const mk=`2026-${String(m).padStart(2,'0')}`;
-    const isCur=m===now.getMonth()+1;
-    const sIcon={pago:'✅',vencido:'❌',pendente:'⬜'};
-    const sBg={pago:'var(--green-dim)',vencido:'var(--red-dim)',pendente:'var(--bg4)'};
-    const items=S.receitasFixas.filter(r=>r.nome).map(r=>{
+  const loopHtml=buildPagLoop('rf',(mk,sIcon,sBg)=>{
+    return S.receitasFixas.filter(r=>r.nome).map(r=>{
       const p=getPag(mk,'rf',r.id);
       const st=p.status||'pendente';
       const val=getValorEfetivo(mk,'rf',r.id,r.valor);
@@ -1041,12 +1177,7 @@ function renderPagReceitas(){
         </div>
       </div>`;
     }).join('');
-    if(!items)continue;
-    html+=`<div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">${meses[m-1]} 2026 ${isCur?'<span style="background:var(--accent-dim);color:var(--accent);font-size:9px;padding:2px 6px;border-radius:99px;font-weight:600;margin-left:4px">atual</span>':''}</div>
-      ${items}
-    </div>`;
-  }
+  });
 
   el.innerHTML=`
     <div class="card" style="margin-bottom:14px">
@@ -1054,7 +1185,7 @@ function renderPagReceitas(){
       ${rfList||'<div style="font-size:11px;color:var(--text3)">Nenhuma receita fixa cadastrada ainda.</div>'}
     </div>
     <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;margin-top:4px">Recebimentos por mês</div>
-    ${html||'<div class="empty-state"><div class="icon">💰</div><p>Adicione receitas fixas acima para acompanhar os recebimentos.</p></div>'}`;
+    ${loopHtml||'<div class="empty-state"><div class="icon">💰</div><p>Adicione receitas fixas acima para acompanhar os recebimentos.</p></div>'}`;
 }
 
 function deleteCF(id){
@@ -1098,8 +1229,6 @@ function removeTag(i){
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────
-
 // ═══════════════════ EXPORT EXCEL ═══════════════════
 function exportExcel(){
   if(!window.XLSX){toast('⚠️ Carregando biblioteca…');return}
@@ -1123,8 +1252,6 @@ function exportJSON(){
   const json = JSON.stringify(S, null, 2);
   const date = new Date().toISOString().split('T')[0];
   const filename = `financas_backup_${date}.json`;
-
-  // iOS Share Sheet via Web Share API
   if(navigator.share && /iPhone|iPad|iPod/.test(navigator.userAgent)){
     const file = new File([json], filename, {type:'application/json'});
     navigator.share({ files:[file], title:'Backup Finanças' })
@@ -1132,8 +1259,6 @@ function exportJSON(){
       .catch(()=>toast('Compartilhamento cancelado'));
     return;
   }
-
-  // Desktop: cria link invisível e clica
   const blob = new Blob([json], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1153,7 +1278,6 @@ function importJSON(input){
   reader.onload = (e) => {
     try {
       const parsed = JSON.parse(e.target.result);
-      // Validate minimum structure
       if(typeof parsed !== 'object' || !parsed.lancamentos){
         toast('⚠️ Arquivo inválido');
         return;
@@ -1162,7 +1286,6 @@ function importJSON(input){
         S = { ...DEF, ...parsed };
         save();
         render();
-        // Refresh SI inputs
         const si = S.saldoIni;
         const siVal = document.getElementById('si-valor');
         const siData = document.getElementById('si-data');
@@ -1200,24 +1323,28 @@ let aiState = {
   currentImageBase64: null,
   currentImageMime: null,
   pendingLanc: null,
-  pendingQuestion: null
+  pendingQuestion: null,
+  textMode: false
 };
 
 function openAIAssistant() {
+  aiState.textMode = false;
   renderAIModal();
 }
 
 function closeAIModal() {
   document.getElementById('ai-modal-root').innerHTML = '';
-  stopRecording();
   aiState.currentImageBase64 = null;
   aiState.currentImageMime = null;
   aiState.pendingLanc = null;
   aiState.pendingQuestion = null;
+  aiState.textMode = false;
 }
 
 function renderAIModal(extras = {}) {
   const { thinking = false, result = null, question = null, imgSrc = null } = extras;
+  // textMode comes from aiState (persistent) or extras override
+  const textMode = extras.textMode !== undefined ? extras.textMode : aiState.textMode;
 
   const imgPreview = imgSrc
     ? `<img class="ai-img-preview show" id="ai-img-prev" src="${imgSrc}">`
@@ -1262,7 +1389,10 @@ function renderAIModal(extras = {}) {
     `;
   }
 
-  const showActions = !thinking && !result && !question;
+  // Show action grid when no thinking/result/question and not in text mode
+  const showActionGrid = !thinking && !result && !question && !textMode;
+  // Show text area when in textMode or not in action grid (but not when showing result/question)
+  const showTextArea = textMode || (!showActionGrid && !thinking && !result && !question);
 
   document.getElementById('ai-modal-root').innerHTML = `
     <div class="ai-modal-overlay" id="ai-overlay" onclick="if(event.target===document.getElementById('ai-overlay'))closeAIModal()">
@@ -1278,7 +1408,7 @@ function renderAIModal(extras = {}) {
         ${resultHTML}
         ${questionHTML}
 
-        ${showActions ? `
+        ${showActionGrid ? `
         <div class="ai-actions" style="grid-template-columns:1fr 1fr 1fr">
           <button class="ai-action-btn" onclick="document.getElementById('ai-photo-input').click()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
@@ -1304,15 +1434,18 @@ function renderAIModal(extras = {}) {
         </div>
         ` : ''}
 
-        <div class="ai-input-area" id="ai-text-area" style="${showActions ? 'display:none' : ''}">
+        ${showTextArea ? `
+        <div class="ai-input-area" id="ai-text-area">
           <textarea id="ai-text-input" placeholder="Ex: paguei 85 reais no mercado hoje, cartão de crédito em 2x…" rows="3"></textarea>
           <div class="ai-input-footer">
             <span class="ai-char-hint" id="ai-transcript-hint"></span>
             <button class="btn-primary" style="width:auto;padding:9px 18px;font-size:13px" onclick="sendAIText()">Enviar →</button>
           </div>
         </div>
+        ` : ''}
 
-        ${!showActions && !result && !question ? `<button class="btn-secondary" style="margin-top:6px" onclick="resetAIModal()">↩ Voltar</button>` : ''}
+        ${(!showActionGrid && !showTextArea && !result && !question) ? `<button class="btn-secondary" style="margin-top:6px" onclick="resetAIModal()">↩ Voltar</button>` : ''}
+        ${(showTextArea && !result && !question) ? `<button class="btn-secondary" style="margin-top:8px" onclick="resetAIModal()">↩ Voltar</button>` : ''}
       </div>
     </div>`;
 }
@@ -1322,13 +1455,17 @@ function resetAIModal() {
   aiState.currentImageMime = null;
   aiState.pendingLanc = null;
   aiState.pendingQuestion = null;
+  aiState.textMode = false;
   renderAIModal();
 }
 
 function focusAIText() {
-  document.getElementById('ai-text-area').style.display = 'block';
-  document.querySelector('.ai-actions').style.display = 'none';
-  setTimeout(() => document.getElementById('ai-text-input').focus(), 100);
+  aiState.textMode = true;
+  renderAIModal({ textMode: true });
+  setTimeout(() => {
+    const el = document.getElementById('ai-text-input');
+    if(el) el.focus();
+  }, 120);
 }
 
 // ── PHOTO ──────────────────────────────────────────────────────────────
@@ -1341,8 +1478,8 @@ function handlePhotoSelected(input) {
     const base64 = dataUrl.split(',')[1];
     aiState.currentImageBase64 = base64;
     aiState.currentImageMime = file.type || 'image/jpeg';
+    aiState.textMode = false;
     renderAIModal({ imgSrc: dataUrl, thinking: false });
-    // Auto-send with image
     sendAIImage();
   };
   reader.readAsDataURL(file);
@@ -1358,7 +1495,7 @@ function sendAIImage() {
 function sendAIText() {
   const ta = document.getElementById('ai-text-input');
   const text = ta ? ta.value.trim() : '';
-  if (!text && !aiState.currentImageBase64) { toast('⚠️ Digite ou fale algo primeiro'); return; }
+  if (!text && !aiState.currentImageBase64) { toast('⚠️ Digite algo primeiro'); return; }
   renderAIModal({ thinking: true, imgSrc: aiState.currentImageBase64 ? `data:${aiState.currentImageMime};base64,${aiState.currentImageBase64}` : null });
   callClaudeAPI({ type: 'text', text });
 }
@@ -1369,8 +1506,6 @@ function answerAIQuestion(value, label) {
   const field = aiState.pendingQuestion.field;
   aiState.pendingLanc[field] = value;
   aiState.pendingQuestion = null;
-
-  // Check if still has doubts
   checkAndAskOrConfirm(aiState.pendingLanc);
 }
 
@@ -1378,10 +1513,8 @@ function answerAIQuestion(value, label) {
 function confirmAILanc() {
   const l = aiState.pendingLanc;
   if (!l) return;
-
   const data = l.data || todayStr();
   const parc = parseInt(l.parcelas) || 1;
-
   if (l.tipo === 'credito' && parc > 1) {
     const [y, m, d] = data.split('-').map(Number);
     for (let p = 0; p < parc; p++) {
@@ -1395,7 +1528,6 @@ function confirmAILanc() {
     S.lancamentos.unshift({ id: S.nextId++, tipo: l.tipo, desc: l.desc, valor: l.valor, data, parcelas: parc, parcelaAtual: 1, tags: l.tags || [] });
     toast('✓ Lançamento adicionado pelo assistente!');
   }
-
   save(); render();
   closeAIModal();
 }
@@ -1432,7 +1564,6 @@ Regras de classificação:
 - Data padrão = hoje se não mencionada`;
 
   let userContent = [];
-
   if (type === 'image' && aiState.currentImageBase64) {
     userContent = [
       { type: 'image', source: { type: 'base64', media_type: aiState.currentImageMime, data: aiState.currentImageBase64 } },
@@ -1488,7 +1619,6 @@ Regras de classificação:
 }
 
 function checkAndAskOrConfirm(l) {
-  // Check for missing critical fields and ask
   if (!l.tipo) {
     aiState.pendingQuestion = {
       field: 'tipo',
@@ -1516,7 +1646,6 @@ function checkAndAskOrConfirm(l) {
     return;
   }
 
-  // Fix tags field: if it's a string, wrap it
   if (typeof l.tags === 'string') l.tags = [l.tags];
 
   const imgSrc = aiState.currentImageBase64 ? `data:${aiState.currentImageMime};base64,${aiState.currentImageBase64}` : null;
