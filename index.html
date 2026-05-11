@@ -826,8 +826,10 @@ function calcDia(dataStr){
   if(debLanc.length>0){
     debLanc.forEach(l=>{debito+=l.valor;items.debito.push({...l});});
   } else if(!isPast){
-    debito=S.saldoIni.limite||150;
-    items.debito.push({desc:'Limite diário projetado',valor:debito,tipo:'debito'});
+    // Limite diário projetado entra como crédito (aparece na fatura do cartão)
+    const lim=S.saldoIni.limite||150;
+    credito+=lim;
+    items.credito.push({desc:'Limite diário projetado',valor:lim,tipo:'credito'});
   } else {
     debito=0;
   }
